@@ -1,0 +1,168 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  displayName  String?  @map("display_name")
+  avatarUrl    String?  @map("avatar_url")
+  status       String   @default("active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  groupsCreated    Group[]
+  groupMembers     GroupMember[]
+  accounts         Account[]
+  expensesPaidBy   Expense[]
+  expenseShares    ExpenseShare[]
+  settlementsFrom  Settlement[] @relation("from_user")
+  settlementsTo    Settlement[] @relation("to_user")
+  subscriptionSlots SubscriptionSlot[]
+
+  @@map("users")
+}
+
+model Group {
+  id            String   @id @default(uuid()) @db.Uuid
+  name          String
+  baseCurrency  String   @default("VND") @map("base_currency")
+  createdBy     String   @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  creator         User   @relation(fields: [createdBy], references: [id])
+  members         GroupMember[]
+  accounts        Account[]
+  expenses        Expense[]
+  settlements     Settlement[]
+  subscriptionSlots SubscriptionSlot[]
+
+  @@map("groups")
+}
+
+model GroupMember {
+  id       String   @id @default(uuid()) @db.Uuid
+  groupId  String   @db.Uuid @map("group_id")
+  userId   String   @db.Uuid @map("user_id")
+  role     String   @default("member")
+  joinedAt DateTime @default(now()) @map("joined_at")
+  leftAt   DateTime? @map("left_at")
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("group_members")
+}
+
+model Account {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid @map("user_id")
+  groupId   String   @db.Uuid @map("group_id")
+  name      String
+  currency  String   @default("VND")
+  balance   Decimal  @default(0)
+  status    String   @default("active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user        User         @relation(fields: [userId], references: [id])
+  group       Group        @relation(fields: [groupId], references: [id])
+  allocations Allocation[]
+
+  @@map("accounts")
+}
+
+model Allocation {
+  id               String   @id @default(uuid()) @db.Uuid
+  accountId        String   @db.Uuid @map("account_id")
+  allocationType   String?  @map("allocation_type")
+  name             String
+  amount           Decimal?
+  currency         String   @default("VND")
+  period           String?
+  billingDay       Int?     @map("billing_day")
+  targetAmount     Decimal? @map("target_amount")
+  status           String   @default("active")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  account            Account           @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  subscriptionSlots  SubscriptionSlot[]
+
+  @@map("allocations")
+}
+
+model SubscriptionSlot {
+  id                      String   @id @default(uuid()) @db.Uuid
+  subscriptionAllocationId String   @db.Uuid @map("subscription_allocation_id")
+  groupId                 String   @db.Uuid @map("group_id")
+  userId                  String   @db.Uuid @map("user_id")
+  slotUnits               Int      @default(1) @map("slot_units")
+  joinedAt                DateTime @default(now()) @map("joined_at")
+  leftAt                  DateTime? @map("left_at")
+
+  allocation Allocation @relation(fields: [subscriptionAllocationId], references: [id], onDelete: Cascade)
+  group      Group      @relation(fields: [groupId], references: [id])
+  user       User       @relation(fields: [userId], references: [id])
+
+  @@map("subscription_slots")
+}
+
+model Expense {
+  id          String   @id @default(uuid()) @db.Uuid
+  groupId     String   @db.Uuid @map("group_id")
+  title       String
+  expenseType String?  @map("expense_type")
+  category    String?
+  amountTotal Decimal  @map("amount_total")
+  currency    String   @default("VND")
+  paidBy      String   @db.Uuid @map("paid_by")
+  expenseDate DateTime @default(now()) @db.Date @map("expense_date")
+  note        String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  group  Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  paidByUser User        @relation(fields: [paidBy], references: [id])
+  shares ExpenseShare[]
+
+  @@map("expenses")
+}
+
+model ExpenseShare {
+  id         String   @id @default(uuid()) @db.Uuid
+  expenseId  String   @db.Uuid @map("expense_id")
+  userId     String   @db.Uuid @map("user_id")
+  owedAmount Decimal  @map("owed_amount")
+  shareNote  String?  @map("share_note")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@map("expense_shares")
+}
+
+model Settlement {
+  id              String   @id @default(uuid()) @db.Uuid
+  groupId         String   @db.Uuid @map("group_id")
+  fromUserId      String   @db.Uuid @map("from_user_id")
+  toUserId        String   @db.Uuid @map("to_user_id")
+  amount          Decimal
+  currency        String   @default("VND")
+  settlementDate  DateTime @default(now()) @db.Date @map("settlement_date")
+  note            String?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  group       Group @relation(fields: [groupId], references: [id])
+  fromUser    User  @relation("from_user", fields: [fromUserId], references: [id])
+  toUser      User  @relation("to_user", fields: [toUserId], references: [id])
+
+  @@map("settlements")
+}
