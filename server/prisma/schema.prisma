@@ -39,6 +39,7 @@ model Group {
 
   creator         User   @relation(fields: [createdBy], references: [id])
   members         GroupMember[]
+  invites         Invite[]
   accounts        Account[]
   expenses        Expense[]
   settlements     Settlement[]
@@ -51,7 +52,7 @@ model GroupMember {
   id       String   @id @default(uuid()) @db.Uuid
   groupId  String   @db.Uuid @map("group_id")
   userId   String   @db.Uuid @map("user_id")
-  role     String   @default("member")
+  role     String   @default("MEMBER")
   joinedAt DateTime @default(now()) @map("joined_at")
   leftAt   DateTime? @map("left_at")
 
@@ -59,7 +60,24 @@ model GroupMember {
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("group_members")
+  @@unique([groupId, userId])
 }
+
+model Invite {
+  id       String   @id @default(uuid()) @db.Uuid
+  groupId  String   @db.Uuid @map("group_id")
+  emailInvite    String @map("email_invite")
+  role     String   @default("MEMBER")
+  token    String   @unique 
+  status   String   @default("PENDING")
+  expiredAt DateTime @map("expired_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, emailInvite])
+  @@map("invites")
+}
+  
 
 model Account {
   id        String   @id @default(uuid()) @db.Uuid
