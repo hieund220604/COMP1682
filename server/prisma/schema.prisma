@@ -176,6 +176,9 @@ model Settlement {
   currency        String   @default("VND")
   settlementDate  DateTime @default(now()) @db.Date @map("settlement_date")
   note            String?
+  status          String   @default("PENDING")
+  vnpayTxnRef     String?  @map("vnpay_txn_ref")
+  vnpayTransDate  DateTime? @map("vnpay_trans_date")
   createdAt       DateTime @default(now()) @map("created_at")
 
   group       Group @relation(fields: [groupId], references: [id])

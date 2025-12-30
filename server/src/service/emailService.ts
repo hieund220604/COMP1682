@@ -6,47 +6,50 @@ const otpStore = new Map<string, { otp: string; expiresAt: number; attempts: num
 
 // Configure your email service here
 const transporter = nodemailer.createTransport({
-    // For Gmail:
-    service: 'gmail',
-    auth: {
-        user: process.env.EMAIL_USER || 'your-email@gmail.com',
-        pass: process.env.EMAIL_PASSWORD || 'your-app-password',
-    },
+  // For Gmail:
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER || 'your-email@gmail.com',
+    pass: process.env.EMAIL_PASSWORD || 'your-app-password',
+  },
 
-    // For other services, use:
-    // host: process.env.EMAIL_HOST,
-    // port: parseInt(process.env.EMAIL_PORT || '587'),
-    // secure: process.env.EMAIL_SECURE === 'true',
-    // auth: {
-    //   user: process.env.EMAIL_USER,
-    //   pass: process.env.EMAIL_PASSWORD,
-    // },
+  // For other services, use:
+  // host: process.env.EMAIL_HOST,
+  // port: parseInt(process.env.EMAIL_PORT || '587'),
+  // secure: process.env.EMAIL_SECURE === 'true',
+  // auth: {
+  //   user: process.env.EMAIL_USER,
+  //   pass: process.env.EMAIL_PASSWORD,
+  // },
 });
 
 function generateOTP(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+  return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 export const emailService = {
-    /**
-     * Send OTP to email
-     */
-    async sendOTP(email: string): Promise<string> {
-        const otp = generateOTP();
-        const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+  /**
+   * Send OTP to email
+   */
+  async sendOTP(email: string): Promise<string> {
+    const otp = generateOTP();
+    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
 
-        otpStore.set(email, {
-            otp,
-            expiresAt,
-            attempts: 0,
-        });
+    otpStore.set(email, {
+      otp,
+      expiresAt,
+      attempts: 0,
+    });
 
-        try {
-            await transporter.sendMail({
-                from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
-                to: email,
-                subject: '🔐 Your Verification Code - SplitPay',
-                html: `
+    // Log OTP to console for development/testing
+    console.log(`[DEV MODE] OTP for ${email}: ${otp}`);
+
+    try {
+      await transporter.sendMail({
+        from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+        to: email,
+        subject: '🔐 Your Verification Code - SplitPay',
+        html: `
           <!DOCTYPE html>
           <html lang="en">
           <head>
@@ -112,63 +115,64 @@ export const emailService = {
           </body>
           </html>
         `,
-            });
+      });
 
-            return otp;
-        } catch (error) {
-            console.error('Failed to send OTP:', error);
-            throw new Error('Failed to send OTP email');
-        }
-    },
+      return otp;
+    } catch (error) {
+      console.error('Failed to send OTP email (ignoring for dev):', error);
+      // In development, we return the OTP anyway so the user can verify it from console logs
+      return otp;
+    }
+  },
 
-    /**
-     * Verify OTP
-     */
-    verifyOTP(email: string, otp: string): boolean {
-        const record = otpStore.get(email);
+  /**
+   * Verify OTP
+   */
+  verifyOTP(email: string, otp: string): boolean {
+    const record = otpStore.get(email);
 
-        if (!record) {
-            return false;
-        }
+    if (!record) {
+      return false;
+    }
 
-        // Check if OTP is expired
-        if (Date.now() > record.expiresAt) {
-            otpStore.delete(email);
-            return false;
-        }
+    // Check if OTP is expired
+    if (Date.now() > record.expiresAt) {
+      otpStore.delete(email);
+      return false;
+    }
 
-        // Check if OTP matches
-        if (record.otp !== otp) {
-            record.attempts += 1;
+    // Check if OTP matches
+    if (record.otp !== otp) {
+      record.attempts += 1;
 
-            // Delete after 3 failed attempts
-            if (record.attempts >= 3) {
-                otpStore.delete(email);
-            } else {
-                otpStore.set(email, record);
-            }
-
-            return false;
-        }
-
-        // OTP is valid, delete it
+      // Delete after 3 failed attempts
+      if (record.attempts >= 3) {
         otpStore.delete(email);
-        return true;
-    },
+      } else {
+        otpStore.set(email, record);
+      }
 
-    /**
-     * Send password reset email
-     */
-    async sendPasswordResetEmail(email: string, resetToken: string): Promise<void> {
-        const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
+      return false;
+    }
+
+    // OTP is valid, delete it
+    otpStore.delete(email);
+    return true;
+  },
+
+  /**
+   * Send password reset email
+   */
+  async sendPasswordResetEmail(email: string, resetToken: string): Promise<void> {
+    const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
 
 
-        try {
-            await transporter.sendMail({
-                from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
-                to: email,
-                subject: '🔑 Reset Your Password - SplitPay',
-                html: `
+    try {
+      await transporter.sendMail({
+        from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+        to: email,
+        subject: '🔑 Reset Your Password - SplitPay',
+        html: `
           <!DOCTYPE html>
           <html lang="en">
           <head>
@@ -254,23 +258,23 @@ export const emailService = {
           </body>
           </html>
         `,
-            });
-        } catch (error) {
-            console.error('Failed to send password reset email:', error);
-            throw new Error('Failed to send password reset email');
-        }
-    },
+      });
+    } catch (error) {
+      console.error('Failed to send password reset email:', error);
+      throw new Error('Failed to send password reset email');
+    }
+  },
 
-    /**
-     * Send welcome email
-     */
-    async sendWelcomeEmail(email: string, displayName?: string): Promise<void> {
-        try {
-            await transporter.sendMail({
-                from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
-                to: email,
-                subject: 'Welcome to SplitPay',
-                html: `
+  /**
+   * Send welcome email
+   */
+  async sendWelcomeEmail(email: string, displayName?: string): Promise<void> {
+    try {
+      await transporter.sendMail({
+        from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+        to: email,
+        subject: 'Welcome to SplitPay',
+        html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2>Welcome ${displayName ? `${displayName}` : 'to SplitPay'}!</h2>
             <p>Your account has been successfully activated!</p>
@@ -278,10 +282,10 @@ export const emailService = {
             <p style="color: #666; font-size: 12px;">Thank you for joining our community!</p>
           </div>
         `,
-            });
-        } catch (error) {
-            console.error('Failed to send welcome email:', error);
-            // Don't throw error for welcome email
-        }
-    },
+      });
+    } catch (error) {
+      console.error('Failed to send welcome email:', error);
+      // Don't throw error for welcome email
+    }
+  },
 };

@@ -4,6 +4,9 @@ import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
 import authRoutes from './route/authRoutes';
 import groupRoutes from './route/groupRoutes';
+import expenseRoutes from './route/expenseRoutes';
+import settlementRoutes from './route/settlementRoutes';
+import vnpayRoutes from './route/vnpayRoutes';
 
 dotenv.config();
 
@@ -19,6 +22,9 @@ app.use(express.urlencoded({ extended: true }));
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/groups', groupRoutes);
+app.use('/api/groups', expenseRoutes);
+app.use('/api/groups', settlementRoutes);
+app.use('/api/payments', vnpayRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
