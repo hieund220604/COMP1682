@@ -14,6 +14,7 @@ model User {
   passwordHash String   @map("password_hash")
   displayName  String?  @map("display_name")
   avatarUrl    String?  @map("avatar_url")
+  balance      Decimal  @default(0)
   status       String   @default("active")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
@@ -26,6 +27,8 @@ model User {
   settlementsFrom  Settlement[] @relation("from_user")
   settlementsTo    Settlement[] @relation("to_user")
   subscriptionSlots SubscriptionSlot[]
+  topUps           TopUp[]
+  withdrawals      Withdrawal[]
 
   @@map("users")
 }
@@ -93,7 +96,6 @@ model Account {
   user        User         @relation(fields: [userId], references: [id])
   group       Group        @relation(fields: [groupId], references: [id])
   allocations Allocation[]
-  topUps      TopUp[]
 
   @@map("accounts")
 }
@@ -191,7 +193,7 @@ model Settlement {
 
 model TopUp {
   id          String   @id @default(uuid()) @db.Uuid
-  accountId   String   @db.Uuid @map("account_id")
+  userId      String   @db.Uuid @map("user_id")
   amount      Decimal
   currency    String   @default("VND")
   status      String   @default("PENDING") // PENDING, COMPLETED, FAILED
@@ -199,6 +201,25 @@ model TopUp {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  account     Account  @relation(fields: [accountId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
   @@map("top_ups")
+}
+
+model Withdrawal {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @db.Uuid @map("user_id")
+  amount          Decimal
+  currency        String   @default("VND")
+  accountNumber   String   @map("account_number")
+  bankName        String   @map("bank_name")
+  accountName     String   @map("account_name")
+  status          String   @default("PENDING") // PENDING, OTP_SENT, OTP_VERIFIED, COMPLETED, FAILED
+  otp             String?
+  otpExpiresAt    DateTime? @map("otp_expires_at")
+  verifiedAt      DateTime? @map("verified_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  user            User     @relation(fields: [userId], references: [id])
+  @@map("withdrawals")
 }

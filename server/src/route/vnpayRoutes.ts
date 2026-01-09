@@ -6,6 +6,7 @@ const router = Router();
 
 // Create payment requires authentication
 router.post('/', authMiddleware, vnpayController.createPayment);
+router.post('/topup', authMiddleware, vnpayController.createTopUp);
 
 // VNPay callbacks - no auth required (called by VNPay)
 router.get('/vnpay-return', vnpayController.vnpayReturn);

@@ -5,20 +5,20 @@ import { vnpayService } from './vnpayService';
 const prisma = new PrismaClient();
 
 export const accountService = {
-    async createTopUp(accountId: string, amount: number): Promise<string> {
-        // Validate account
-        const account = await prisma.account.findUnique({
-            where: { id: accountId }
+    async createTopUp(userId: string, amount: number): Promise<string> {
+        // Validate user exists
+        const user = await prisma.user.findUnique({
+            where: { id: userId }
         });
 
-        if (!account) {
-            throw new Error('Account not found');
+        if (!user) {
+            throw new Error('User not found');
         }
 
         // Create pending top-up
         const topUp = await prisma.topUp.create({
             data: {
-                accountId,
+                userId,
                 amount,
                 status: TopUpStatus.PENDING
             }
@@ -40,7 +40,7 @@ export const accountService = {
             return; // Already completed
         }
 
-        // Transaction to update status and balance
+        // Transaction to update status and balance on User
         await prisma.$transaction([
             prisma.topUp.update({
                 where: { id: topUpId },
@@ -49,8 +49,8 @@ export const accountService = {
                     vnpayTxnRef: txnRef
                 }
             }),
-            prisma.account.update({
-                where: { id: topUp.accountId },
+            prisma.user.update({
+                where: { id: topUp.userId },
                 data: {
                     balance: {
                         increment: topUp.amount

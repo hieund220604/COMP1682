@@ -8,6 +8,7 @@ import expenseRoutes from './route/expenseRoutes';
 import settlementRoutes from './route/settlementRoutes';
 import accountRoutes from './route/accountRoutes';
 import vnpayRoutes from './route/vnpayRoutes';
+import withdrawalRoutes from './route/withdrawalRoutes';
 
 dotenv.config();
 
@@ -27,6 +28,7 @@ app.use('/api/groups', expenseRoutes);
 app.use('/api/groups', settlementRoutes);
 app.use('/api/accounts', accountRoutes);
 app.use('/api/payments', vnpayRoutes);
+app.use('/api/withdrawals', withdrawalRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

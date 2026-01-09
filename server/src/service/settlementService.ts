@@ -224,12 +224,77 @@ export const settlementService = {
     },
 
     async updateSettlementStatus(settlementId: string, status: SettlementStatus, vnpayTxnRef?: string): Promise<SettlementResponse> {
-        const settlement = await prisma.settlement.update({
+        const settlement = await prisma.settlement.findUnique({
+            where: { id: settlementId }
+        });
+
+        if (!settlement) {
+            throw new Error('Settlement not found');
+        }
+
+        // If settlement is being marked as COMPLETED, update user balances
+        if (status === 'COMPLETED' && settlement.status !== 'COMPLETED') {
+            const updatedSettlement = await prisma.$transaction(async (tx) => {
+                // Decrease fromUser balance (they are paying)
+                await tx.user.update({
+                    where: { id: settlement.fromUserId },
+                    data: {
+                        balance: {
+                            decrement: settlement.amount
+                        }
+                    }
+                });
+
+                // Increase toUser balance (they are receiving)
+                await tx.user.update({
+                    where: { id: settlement.toUserId },
+                    data: {
+                        balance: {
+                            increment: settlement.amount
+                        }
+                    }
+                });
+
+                // Update settlement status
+                return await tx.settlement.update({
+                    where: { id: settlementId },
+                    data: {
+                        status,
+                        vnpayTxnRef,
+                        vnpayTransDate: new Date()
+                    },
+                    include: {
+                        fromUser: {
+                            select: { id: true, email: true, displayName: true, avatarUrl: true }
+                        },
+                        toUser: {
+                            select: { id: true, email: true, displayName: true, avatarUrl: true }
+                        }
+                    }
+                });
+            });
+
+            return {
+                id: updatedSettlement.id,
+                groupId: updatedSettlement.groupId,
+                fromUser: transformUser(updatedSettlement.fromUser),
+                toUser: transformUser(updatedSettlement.toUser),
+                amount: Number(updatedSettlement.amount),
+                currency: updatedSettlement.currency,
+                status: updatedSettlement.status as SettlementStatus,
+                settlementDate: updatedSettlement.settlementDate,
+                note: updatedSettlement.note ?? undefined,
+                vnpayTxnRef: updatedSettlement.vnpayTxnRef ?? undefined,
+                createdAt: updatedSettlement.createdAt
+            };
+        }
+
+        // For other status updates, just update the settlement without changing balances
+        const updatedSettlement = await prisma.settlement.update({
             where: { id: settlementId },
             data: {
                 status,
-                vnpayTxnRef,
-                vnpayTransDate: status === 'COMPLETED' ? new Date() : undefined
+                vnpayTxnRef
             },
             include: {
                 fromUser: {
@@ -242,17 +307,17 @@ export const settlementService = {
         });
 
         return {
-            id: settlement.id,
-            groupId: settlement.groupId,
-            fromUser: transformUser(settlement.fromUser),
-            toUser: transformUser(settlement.toUser),
-            amount: Number(settlement.amount),
-            currency: settlement.currency,
-            status: settlement.status as SettlementStatus,
-            settlementDate: settlement.settlementDate,
-            note: settlement.note ?? undefined,
-            vnpayTxnRef: settlement.vnpayTxnRef ?? undefined,
-            createdAt: settlement.createdAt
+            id: updatedSettlement.id,
+            groupId: updatedSettlement.groupId,
+            fromUser: transformUser(updatedSettlement.fromUser),
+            toUser: transformUser(updatedSettlement.toUser),
+            amount: Number(updatedSettlement.amount),
+            currency: updatedSettlement.currency,
+            status: updatedSettlement.status as SettlementStatus,
+            settlementDate: updatedSettlement.settlementDate,
+            note: updatedSettlement.note ?? undefined,
+            vnpayTxnRef: updatedSettlement.vnpayTxnRef ?? undefined,
+            createdAt: updatedSettlement.createdAt
         };
     },
 
