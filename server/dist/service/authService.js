@@ -6,9 +6,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.authService = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const extension_1 = require("@prisma/client/extension");
+const client_1 = require("@prisma/client");
 const emailService_1 = require("./emailService");
-const prisma = new extension_1.PrismaClient();
+const prisma = new client_1.PrismaClient();
 exports.authService = {
     async hashPassword(password) {
         const salt = await bcryptjs_1.default.genSalt(10);
@@ -40,7 +40,7 @@ exports.authService = {
         const newUser = await prisma.user.create({
             data: {
                 email,
-                password: hashedPassword,
+                passwordHash: hashedPassword,
                 displayName: displayName || email.split('@')[0],
                 status: "inactive"
             },
@@ -84,7 +84,7 @@ exports.authService = {
         if (user.status !== 'active') {
             throw new Error('Account is not active. Please verify your email.');
         }
-        const isPasswordValid = await this.comparePassword(password, user.password);
+        const isPasswordValid = await this.comparePassword(password, user.passwordHash);
         if (!isPasswordValid) {
             throw new Error('Invalid email or password');
         }
@@ -117,7 +117,7 @@ exports.authService = {
             const passsowrdHash = await this.hashPassword(newPassword);
             const updatedUser = await prisma.user.update({
                 where: { id: decoded.userId },
-                data: { password: passsowrdHash },
+                data: { passwordHash: passsowrdHash },
             });
             ;
             return {
@@ -139,5 +139,25 @@ exports.authService = {
         }
         await emailService_1.emailService.sendOTP(email);
         return 'A new OTP has been sent to your email.';
+    },
+    async getUserProfilebyID(userId) {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true, email: true, displayName: true, avatarUrl: true, status: true, createdAt: true, updatedAt: true }
+        });
+        if (!user) {
+            throw new Error('User not found');
+        }
+        return user;
+    },
+    async updateProfile(userId, data) {
+        const user = await prisma.user.update({
+            where: { id: userId },
+            data,
+            select: {
+                id: true, email: true, displayName: true, avatarUrl: true
+            }
+        });
+        return user;
     }
 };

@@ -8,6 +8,11 @@ const cors_1 = __importDefault(require("cors"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const client_1 = require("@prisma/client");
 const authRoutes_1 = __importDefault(require("./route/authRoutes"));
+const groupRoutes_1 = __importDefault(require("./route/groupRoutes"));
+const expenseRoutes_1 = __importDefault(require("./route/expenseRoutes"));
+const settlementRoutes_1 = __importDefault(require("./route/settlementRoutes"));
+const accountRoutes_1 = __importDefault(require("./route/accountRoutes"));
+const vnpayRoutes_1 = __importDefault(require("./route/vnpayRoutes"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const prisma = new client_1.PrismaClient();
@@ -18,6 +23,11 @@ app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
 // Routes
 app.use('/api/auth', authRoutes_1.default);
+app.use('/api/groups', groupRoutes_1.default);
+app.use('/api/groups', expenseRoutes_1.default);
+app.use('/api/groups', settlementRoutes_1.default);
+app.use('/api/accounts', accountRoutes_1.default);
+app.use('/api/payments', vnpayRoutes_1.default);
 // Health check endpoint
 app.get('/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });

@@ -1,5 +1,6 @@
 import { VNPay, ProductCode, VnpLocale, dateFormat, HashAlgorithm } from 'vnpay';
 import { settlementService } from './settlementService';
+import { accountService } from './accountService';
 import { SettlementStatus } from '../type/settlement';
 import { PaymentResponse } from '../type/vnpay';
 import { PrismaClient } from '@prisma/client';
@@ -59,6 +60,37 @@ export const vnpayService = {
         };
     },
 
+    async createTopUpUrl(topUpId: string, amount: number, returnUrl: string, ipAddr: string): Promise<PaymentResponse> {
+        // Generate unique transaction reference with TU_ prefix
+        const txnRef = `TU_${topUpId.substring(0, 8)}_${Date.now()}`;
+        const createDate = dateFormat(new Date());
+
+        // Create payment URL
+        const paymentUrl = vnpay.buildPaymentUrl({
+            vnp_Amount: amount,
+            vnp_IpAddr: ipAddr,
+            vnp_TxnRef: txnRef,
+            vnp_OrderInfo: `Nap tien tai khoan ${topUpId}`,
+            vnp_OrderType: ProductCode.Other,
+            vnp_ReturnUrl: returnUrl,
+            vnp_Locale: VnpLocale.VN,
+            vnp_CreateDate: createDate
+        });
+
+        // Update top-up with txnRef
+        await prisma.topUp.update({
+            where: { id: topUpId },
+            data: { vnpayTxnRef: txnRef }
+        });
+
+        return {
+            paymentUrl,
+            settlementId: topUpId, // Reusing field name for consistency
+            txnRef,
+            amount: amount
+        };
+    },
+
     async verifyReturnUrl(query: Record<string, string>): Promise<{ isValid: boolean; settlementId?: string; message: string }> {
         try {
             const result = vnpay.verifyReturnUrl(query as any);
@@ -71,8 +103,27 @@ export const vnpayService = {
                 return { isValid: false, message: 'Payment failed' };
             }
 
-            // Extract settlement ID from txnRef
             const txnRef = query.vnp_TxnRef;
+
+            // Check if it is a TopUp transaction
+            if (txnRef.startsWith('TU_')) {
+                const topUp = await prisma.topUp.findFirst({
+                    where: { vnpayTxnRef: txnRef }
+                });
+
+                if (!topUp) {
+                    return { isValid: false, message: 'Top-up transaction not found' };
+                }
+
+                await accountService.completeTopUp(topUp.id, txnRef);
+                return {
+                    isValid: true,
+                    settlementId: topUp.id,
+                    message: 'Top-up successful'
+                };
+            }
+
+            // Otherwise, handle as Settlement
             const settlement = await prisma.settlement.findFirst({
                 where: { vnpayTxnRef: txnRef }
             });
@@ -81,7 +132,6 @@ export const vnpayService = {
                 return { isValid: false, message: 'Settlement not found' };
             }
 
-            // Update settlement status
             await settlementService.updateSettlementStatus(settlement.id, SettlementStatus.COMPLETED, txnRef);
 
             return {
@@ -106,9 +156,36 @@ export const vnpayService = {
             }
 
             const txnRef = query.vnp_TxnRef;
-            const vnpAmount = parseInt(query.vnp_Amount || '0') / 100; // VNPay sends amount * 100
+            const vnpAmount = parseInt(query.vnp_Amount || '0') / 100;
 
-            // Find settlement by txnRef
+            // Handle TopUp
+            if (txnRef.startsWith('TU_')) {
+                const topUp = await prisma.topUp.findFirst({
+                    where: { vnpayTxnRef: txnRef }
+                });
+
+                if (!topUp) {
+                    return { RspCode: '01', Message: 'Top-up not found' };
+                }
+
+                if (topUp.status === 'COMPLETED') {
+                    return { RspCode: '02', Message: 'Top-up already confirmed' };
+                }
+
+                if (Number(topUp.amount) !== vnpAmount) {
+                    return { RspCode: '04', Message: 'Invalid amount' };
+                }
+
+                if (verify.isSuccess) {
+                    await accountService.completeTopUp(topUp.id, txnRef);
+                } else {
+                    await accountService.failTopUp(topUp.id, txnRef);
+                }
+
+                return { RspCode: '00', Message: 'Confirm Success' };
+            }
+
+            // Handle Settlement (Existing Logic)
             const settlement = await prisma.settlement.findFirst({
                 where: { vnpayTxnRef: txnRef }
             });
@@ -117,17 +194,14 @@ export const vnpayService = {
                 return { RspCode: '01', Message: 'Order not found' };
             }
 
-            // Check if already processed
             if (settlement.status === 'COMPLETED') {
                 return { RspCode: '02', Message: 'Order already confirmed' };
             }
 
-            // Verify amount
             if (Number(settlement.amount) !== vnpAmount) {
                 return { RspCode: '04', Message: 'Invalid amount' };
             }
 
-            // Update settlement status based on response
             if (verify.isSuccess) {
                 await settlementService.updateSettlementStatus(settlement.id, SettlementStatus.COMPLETED, txnRef);
             } else {

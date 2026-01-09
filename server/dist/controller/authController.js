@@ -87,5 +87,32 @@ exports.authController = {
             const message = error instanceof Error ? error.message : 'Reset password error';
             res.status(400).json({ success: false, message: 'Failed to reset password', error: message });
         }
+    },
+    async getCurrentUser(req, res) {
+        try {
+            if (!req.user) {
+                res.status(401).json({ success: false, message: 'Unauthorized' });
+                return;
+            }
+            const user = await authService_1.authService.getUserProfilebyID(req.user.userId);
+            res.status(200).json({ success: true, message: 'Current user fetched successfully', data: { user } });
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : 'Get current user error';
+            res.status(400).json({ success: false, message: 'Failed to get current user', error: message });
+        }
+    },
+    async updateProfile(req, res) {
+        try {
+            if (!req.user)
+                res.status(401).json({ success: false, message: 'Unauthorized' });
+            const { displayName, avatarUrl } = req.body;
+            const updatedUser = await authService_1.authService.updateProfile(req.user.userId, { displayName, avatarUrl });
+            res.status(200).json({ success: true, message: 'Profile updated successfully', data: { user: updatedUser } });
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : 'Update profile error';
+            res.status(400).json({ success: false, message: 'Failed to update profile', error: message });
+        }
     }
 };

@@ -56,6 +56,8 @@ export interface InviteResponse {
     expiresAt: Date;
     createdAt: Date;
     token?: string;
+    groupName?: string;
+    groupId?: string;
 }
 
 export interface AcceptInviteRequest {

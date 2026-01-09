@@ -528,5 +528,44 @@ export const groupService = {
             groupId,
             members: balances
         };
+    },
+
+    // Get pending invites for a user by their email
+    async getPendingInvitesForUser(userId: string): Promise<InviteResponse[]> {
+        // Get user email first
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { email: true }
+        });
+
+        if (!user) {
+            throw new Error('User not found');
+        }
+
+        const invites = await prisma.invite.findMany({
+            where: {
+                emailInvite: user.email,
+                status: 'PENDING',
+                expiredAt: { gt: new Date() }
+            },
+            include: {
+                group: {
+                    select: { id: true, name: true }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        return invites.map(invite => ({
+            id: invite.id,
+            emailInvite: invite.emailInvite,
+            role: invite.role as GroupRole,
+            status: invite.status as 'PENDING' | 'ACCEPTED' | 'EXPIRED',
+            expiresAt: invite.expiredAt,
+            createdAt: invite.createdAt,
+            token: invite.token,
+            groupName: invite.group.name,
+            groupId: invite.groupId
+        }));
     }
 };

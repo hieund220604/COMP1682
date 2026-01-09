@@ -235,5 +235,20 @@ export const groupController = {
             const message = error instanceof Error ? error.message : 'Failed to calculate group balance';
             res.status(400).json({ success: false, error: { message, code: 'BALANCE_ERROR' } });
         }
+    },
+
+    // Get pending invites for current user
+    async getPendingInvites(req: Request, res: Response<ApiResponse<InviteResponse[]>>): Promise<void> {
+        try {
+            if (!req.user) {
+                res.status(401).json({ success: false, error: { message: 'Unauthorized', code: 'UNAUTHORIZED' } });
+                return;
+            }
+            const invites = await groupService.getPendingInvitesForUser(req.user.userId);
+            res.status(200).json({ success: true, data: invites });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to get pending invites';
+            res.status(400).json({ success: false, error: { message, code: 'GET_INVITES_ERROR' } });
+        }
     }
 };

@@ -93,6 +93,7 @@ model Account {
   user        User         @relation(fields: [userId], references: [id])
   group       Group        @relation(fields: [groupId], references: [id])
   allocations Allocation[]
+  topUps      TopUp[]
 
   @@map("accounts")
 }
@@ -186,4 +187,18 @@ model Settlement {
   toUser      User  @relation("to_user", fields: [toUserId], references: [id])
 
   @@map("settlements")
+}
+
+model TopUp {
+  id          String   @id @default(uuid()) @db.Uuid
+  accountId   String   @db.Uuid @map("account_id")
+  amount      Decimal
+  currency    String   @default("VND")
+  status      String   @default("PENDING") // PENDING, COMPLETED, FAILED
+  vnpayTxnRef String?  @unique @map("vnpay_txn_ref")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  account     Account  @relation(fields: [accountId], references: [id])
+  @@map("top_ups")
 }

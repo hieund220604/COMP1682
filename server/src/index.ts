@@ -6,6 +6,7 @@ import authRoutes from './route/authRoutes';
 import groupRoutes from './route/groupRoutes';
 import expenseRoutes from './route/expenseRoutes';
 import settlementRoutes from './route/settlementRoutes';
+import accountRoutes from './route/accountRoutes';
 import vnpayRoutes from './route/vnpayRoutes';
 
 dotenv.config();
@@ -24,6 +25,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/groups', expenseRoutes);
 app.use('/api/groups', settlementRoutes);
+app.use('/api/accounts', accountRoutes);
 app.use('/api/payments', vnpayRoutes);
 
 // Health check endpoint

@@ -15,6 +15,7 @@ router.patch('/:groupId', groupController.updateGroup);
 router.delete('/:groupId', groupController.deleteGroup);
 
 // Invites
+router.get('/invites/pending', groupController.getPendingInvites); // Must be before :groupId routes
 router.post('/:groupId/invites', groupController.createInvite);
 router.post('/invites/accept', groupController.acceptInvite);
 
