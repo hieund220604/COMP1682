@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../prisma';
 import {
     CreateExpenseRequest,
     UpdateExpenseRequest,
@@ -7,8 +7,6 @@ import {
     SplitType,
     UserSummary
 } from '../type/expense';
-
-const prisma = new PrismaClient();
 
 function transformUser(user: { id: string; email: string; displayName: string | null; avatarUrl: string | null }): UserSummary {
     return {

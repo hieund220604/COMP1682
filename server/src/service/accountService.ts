@@ -1,8 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../prisma';
 import { TopUpStatus } from '../type/account';
 import { vnpayService } from './vnpayService';
-
-const prisma = new PrismaClient();
 
 export const accountService = {
     async createTopUp(userId: string, amount: number): Promise<string> {

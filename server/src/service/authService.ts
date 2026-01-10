@@ -1,13 +1,11 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../prisma';
 import { emailService } from './emailService';
 import { JWTPayLoad } from '../type/auth';
 import { error } from 'console';
 import { get, STATUS_CODES } from 'http';
 import { verify } from 'crypto';
-
-const prisma = new PrismaClient();
 export const authService = {
     async hashPassword(password: string): Promise<string> {
         const salt = await bcrypt.genSalt(10);

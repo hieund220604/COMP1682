@@ -3,9 +3,9 @@ import { settlementService } from './settlementService';
 import { accountService } from './accountService';
 import { SettlementStatus } from '../type/settlement';
 import { PaymentResponse } from '../type/vnpay';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../prisma';
 
-const prisma = new PrismaClient();
+
 
 // Initialize VNPay instance
 const vnpay = new VNPay({

@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../prisma';
 import { CreateWithdrawalRequest, WithdrawalResponse, WithdrawalSuccessResponse } from '../type/withdrawal';
 import { emailService } from './emailService';
 
-const prisma = new PrismaClient();
+
 
 function generateOTP(): string {
     return Math.floor(100000 + Math.random() * 900000).toString();

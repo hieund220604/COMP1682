@@ -1,4 +1,5 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../prisma';
 import crypto from 'crypto';
 import {
     CreateGroupRequest,
@@ -10,8 +11,6 @@ import {
     GroupBalanceResponse,
     GroupRole
 } from '../type/group';
-
-const prisma = new PrismaClient();
 
 // Helper to transform user object from Prisma (null) to API format (undefined)
 function transformUser(user: { id: string; email: string; displayName: string | null; avatarUrl: string | null }) {
