@@ -13,6 +13,8 @@ const expenseRoutes_1 = __importDefault(require("./route/expenseRoutes"));
 const settlementRoutes_1 = __importDefault(require("./route/settlementRoutes"));
 const accountRoutes_1 = __importDefault(require("./route/accountRoutes"));
 const vnpayRoutes_1 = __importDefault(require("./route/vnpayRoutes"));
+const withdrawalRoutes_1 = __importDefault(require("./route/withdrawalRoutes"));
+const debtRoutes_1 = __importDefault(require("./route/debtRoutes"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const prisma = new client_1.PrismaClient();
@@ -28,6 +30,8 @@ app.use('/api/groups', expenseRoutes_1.default);
 app.use('/api/groups', settlementRoutes_1.default);
 app.use('/api/accounts', accountRoutes_1.default);
 app.use('/api/payments', vnpayRoutes_1.default);
+app.use('/api/withdrawals', withdrawalRoutes_1.default);
+app.use('/api', debtRoutes_1.default);
 // Health check endpoint
 app.get('/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });

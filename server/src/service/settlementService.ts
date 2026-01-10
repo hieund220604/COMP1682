@@ -349,5 +349,331 @@ export const settlementService = {
             vnpayTxnRef: settlement.vnpayTxnRef ?? undefined,
             createdAt: settlement.createdAt
         };
+    },
+
+    async getUserDebts(userId: string, groupId: string): Promise<{
+        groupId: string;
+        currency: string;
+        iOwe: { userId: string; displayName?: string; avatarUrl?: string; amount: number }[];
+        oweMe: { userId: string; displayName?: string; avatarUrl?: string; amount: number }[];
+        netBalance: number;
+    }> {
+        const membership = await prisma.groupMember.findFirst({
+            where: { groupId, userId, leftAt: null }
+        });
+
+        if (!membership) {
+            throw new Error('You are not a member of this group');
+        }
+
+        const group = await prisma.group.findUnique({
+            where: { id: groupId }
+        });
+
+        const members = await prisma.groupMember.findMany({
+            where: { groupId, leftAt: null },
+            include: {
+                user: { select: { id: true, displayName: true, avatarUrl: true } }
+            }
+        });
+
+        const expenses = await prisma.expense.findMany({
+            where: { groupId },
+            include: { shares: true }
+        });
+
+        const settlements = await prisma.settlement.findMany({
+            where: { groupId, status: 'COMPLETED' }
+        });
+
+        // Calculate what each person owes to whom using a pairwise debt matrix
+        // debt[A][B] = how much A owes B
+        const debt = new Map<string, Map<string, number>>();
+        const userInfo = new Map<string, { displayName?: string; avatarUrl?: string }>();
+
+        members.forEach(m => {
+            debt.set(m.userId, new Map());
+            userInfo.set(m.userId, {
+                displayName: m.user.displayName ?? undefined,
+                avatarUrl: m.user.avatarUrl ?? undefined
+            });
+        });
+
+        // For each expense, the payer is owed by each person in shares
+        expenses.forEach(expense => {
+            expense.shares.forEach(share => {
+                if (share.userId !== expense.paidBy) {
+                    const currentDebt = debt.get(share.userId)?.get(expense.paidBy) || 0;
+                    debt.get(share.userId)?.set(expense.paidBy, currentDebt + Number(share.owedAmount));
+                }
+            });
+        });
+
+        // Subtract completed settlements
+        settlements.forEach(s => {
+            const currentDebt = debt.get(s.fromUserId)?.get(s.toUserId) || 0;
+            debt.get(s.fromUserId)?.set(s.toUserId, currentDebt - Number(s.amount));
+        });
+
+        // Calculate what the current user owes and what others owe them
+        const iOwe: { userId: string; displayName?: string; avatarUrl?: string; amount: number }[] = [];
+        const oweMe: { userId: string; displayName?: string; avatarUrl?: string; amount: number }[] = [];
+        let netBalance = 0;
+
+        members.forEach(m => {
+            if (m.userId === userId) return;
+
+            // Net amount between current user and this member
+            const iOweToThem = debt.get(userId)?.get(m.userId) || 0;
+            const theyOweToMe = debt.get(m.userId)?.get(userId) || 0;
+            const netAmount = theyOweToMe - iOweToThem;
+
+            if (netAmount > 0.01) {
+                // Others owe me
+                oweMe.push({
+                    userId: m.userId,
+                    displayName: userInfo.get(m.userId)?.displayName,
+                    avatarUrl: userInfo.get(m.userId)?.avatarUrl,
+                    amount: Math.round(netAmount * 100) / 100
+                });
+                netBalance += netAmount;
+            } else if (netAmount < -0.01) {
+                // I owe others
+                iOwe.push({
+                    userId: m.userId,
+                    displayName: userInfo.get(m.userId)?.displayName,
+                    avatarUrl: userInfo.get(m.userId)?.avatarUrl,
+                    amount: Math.round(Math.abs(netAmount) * 100) / 100
+                });
+                netBalance += netAmount;
+            }
+        });
+
+        return {
+            groupId,
+            currency: group?.baseCurrency || 'VND',
+            iOwe,
+            oweMe,
+            netBalance: Math.round(netBalance * 100) / 100
+        };
+    },
+
+    async payWithBalance(userId: string, settlementId: string): Promise<{
+        success: boolean;
+        message: string;
+        settlementId: string;
+        amountPaid: number;
+        newBalance: number;
+    }> {
+        const settlement = await prisma.settlement.findUnique({
+            where: { id: settlementId },
+            include: { fromUser: true }
+        });
+
+        if (!settlement) {
+            throw new Error('Settlement not found');
+        }
+
+        if (settlement.fromUserId !== userId) {
+            throw new Error('You can only pay settlements where you are the payer');
+        }
+
+        if (settlement.status !== 'PENDING') {
+            throw new Error('Settlement is not in pending status');
+        }
+
+        // Check user balance
+        const user = await prisma.user.findUnique({
+            where: { id: userId }
+        });
+
+        if (!user) {
+            throw new Error('User not found');
+        }
+
+        const userBalance = Number(user.balance);
+        const amount = Number(settlement.amount);
+
+        if (userBalance < amount) {
+            throw new Error(`Insufficient balance. Available: ${userBalance}, Required: ${amount}`);
+        }
+
+        // Execute payment in transaction
+        const [updatedUser] = await prisma.$transaction([
+            // Decrease payer balance
+            prisma.user.update({
+                where: { id: userId },
+                data: { balance: { decrement: amount } }
+            }),
+            // Increase recipient balance
+            prisma.user.update({
+                where: { id: settlement.toUserId },
+                data: { balance: { increment: amount } }
+            }),
+            // Update settlement status
+            prisma.settlement.update({
+                where: { id: settlementId },
+                data: { status: 'COMPLETED' }
+            })
+        ]);
+
+        return {
+            success: true,
+            message: 'Payment completed successfully',
+            settlementId,
+            amountPaid: amount,
+            newBalance: Number(updatedUser.balance)
+        };
+    },
+
+    /**
+     * Quick pay: Tạo settlement và thanh toán ngay bằng balance
+     */
+    async quickPayDebt(userId: string, groupId: string, toUserId: string, amount: number, paymentMethod: 'BALANCE' | 'VNPAY'): Promise<{
+        settlementId: string;
+        status: string;
+        paymentUrl?: string;
+    }> {
+        const membership = await prisma.groupMember.findFirst({
+            where: { groupId, userId, leftAt: null }
+        });
+
+        if (!membership) {
+            throw new Error('You are not a member of this group');
+        }
+
+        if (userId === toUserId) {
+            throw new Error('Cannot pay yourself');
+        }
+
+        // Create settlement
+        const settlement = await prisma.settlement.create({
+            data: {
+                groupId,
+                fromUserId: userId,
+                toUserId,
+                amount,
+                currency: 'VND',
+                status: 'PENDING'
+            }
+        });
+
+        if (paymentMethod === 'BALANCE') {
+            // Pay immediately with balance
+            const result = await this.payWithBalance(userId, settlement.id);
+            return {
+                settlementId: settlement.id,
+                status: 'COMPLETED'
+            };
+        } else {
+            // Return settlement ID for VNPay payment
+            return {
+                settlementId: settlement.id,
+                status: 'PENDING'
+            };
+        }
+    },
+
+    /**
+     * Lấy các khoản tôi đang nợ (pending settlements where I am the payer)
+     */
+    async getMyPendingDebts(userId: string, groupId: string): Promise<{
+        debts: {
+            settlementId: string;
+            toUser: UserSummary;
+            amount: number;
+            currency: string;
+            status: string;
+            createdAt: Date;
+        }[];
+        totalAmount: number;
+    }> {
+        const membership = await prisma.groupMember.findFirst({
+            where: { groupId, userId, leftAt: null }
+        });
+
+        if (!membership) {
+            throw new Error('You are not a member of this group');
+        }
+
+        const settlements = await prisma.settlement.findMany({
+            where: {
+                groupId,
+                fromUserId: userId,
+                status: 'PENDING'
+            },
+            include: {
+                toUser: {
+                    select: { id: true, email: true, displayName: true, avatarUrl: true }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        const debts = settlements.map(s => ({
+            settlementId: s.id,
+            toUser: transformUser(s.toUser),
+            amount: Number(s.amount),
+            currency: s.currency,
+            status: s.status,
+            createdAt: s.createdAt
+        }));
+
+        return {
+            debts,
+            totalAmount: debts.reduce((sum, d) => sum + d.amount, 0)
+        };
+    },
+
+    /**
+     * Lấy các khoản người khác đang nợ tôi (settlements where I am the recipient)
+     */
+    async getMyPendingCredits(userId: string, groupId: string): Promise<{
+        credits: {
+            settlementId: string;
+            fromUser: UserSummary;
+            amount: number;
+            currency: string;
+            status: string;
+            createdAt: Date;
+        }[];
+        totalPending: number;
+        totalCompleted: number;
+    }> {
+        const membership = await prisma.groupMember.findFirst({
+            where: { groupId, userId, leftAt: null }
+        });
+
+        if (!membership) {
+            throw new Error('You are not a member of this group');
+        }
+
+        const settlements = await prisma.settlement.findMany({
+            where: {
+                groupId,
+                toUserId: userId
+            },
+            include: {
+                fromUser: {
+                    select: { id: true, email: true, displayName: true, avatarUrl: true }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        const credits = settlements.map(s => ({
+            settlementId: s.id,
+            fromUser: transformUser(s.fromUser),
+            amount: Number(s.amount),
+            currency: s.currency,
+            status: s.status,
+            createdAt: s.createdAt
+        }));
+
+        return {
+            credits,
+            totalPending: credits.filter(c => c.status === 'PENDING').reduce((sum, c) => sum + c.amount, 0),
+            totalCompleted: credits.filter(c => c.status === 'COMPLETED').reduce((sum, c) => sum + c.amount, 0)
+        };
     }
 };

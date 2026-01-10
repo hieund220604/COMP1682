@@ -6,4 +6,5 @@ var SplitType;
     SplitType["EQUAL"] = "EQUAL";
     SplitType["EXACT"] = "EXACT";
     SplitType["PERCENT"] = "PERCENT";
+    SplitType["ITEM_BASED"] = "ITEM_BASED";
 })(SplitType || (exports.SplitType = SplitType = {}));

@@ -1,20 +1,19 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.accountService = void 0;
-const client_1 = require("@prisma/client");
+const prisma_1 = require("../prisma");
 const account_1 = require("../type/account");
-const prisma = new client_1.PrismaClient();
 exports.accountService = {
     async createTopUp(userId, amount) {
         // Validate user exists
-        const user = await prisma.user.findUnique({
+        const user = await prisma_1.prisma.user.findUnique({
             where: { id: userId }
         });
         if (!user) {
             throw new Error('User not found');
         }
         // Create pending top-up
-        const topUp = await prisma.topUp.create({
+        const topUp = await prisma_1.prisma.topUp.create({
             data: {
                 userId,
                 amount,
@@ -24,7 +23,7 @@ exports.accountService = {
         return topUp.id;
     },
     async completeTopUp(topUpId, txnRef) {
-        const topUp = await prisma.topUp.findUnique({
+        const topUp = await prisma_1.prisma.topUp.findUnique({
             where: { id: topUpId }
         });
         if (!topUp) {
@@ -34,15 +33,15 @@ exports.accountService = {
             return; // Already completed
         }
         // Transaction to update status and balance on User
-        await prisma.$transaction([
-            prisma.topUp.update({
+        await prisma_1.prisma.$transaction([
+            prisma_1.prisma.topUp.update({
                 where: { id: topUpId },
                 data: {
                     status: account_1.TopUpStatus.COMPLETED,
                     vnpayTxnRef: txnRef
                 }
             }),
-            prisma.user.update({
+            prisma_1.prisma.user.update({
                 where: { id: topUp.userId },
                 data: {
                     balance: {
@@ -53,7 +52,7 @@ exports.accountService = {
         ]);
     },
     async failTopUp(topUpId, txnRef) {
-        await prisma.topUp.update({
+        await prisma_1.prisma.topUp.update({
             where: { id: topUpId },
             data: {
                 status: account_1.TopUpStatus.FAILED,

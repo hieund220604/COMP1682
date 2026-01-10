@@ -1,13 +1,21 @@
 export enum SplitType {
     EQUAL = "EQUAL",
     EXACT = "EXACT",
-    PERCENT = "PERCENT"
+    PERCENT = "PERCENT",
+    ITEM_BASED = "ITEM_BASED"
 }
 
 export interface ExpenseShareInput {
     userId: string;
     amount?: number;
     percent?: number;
+}
+
+export interface ExpenseItemInput {
+    name: string;
+    price: number;
+    quantity?: number;
+    assignedTo: string;
 }
 
 export interface CreateExpenseRequest {
@@ -19,7 +27,8 @@ export interface CreateExpenseRequest {
     expenseDate?: Date;
     note?: string;
     splitType: SplitType;
-    shares: ExpenseShareInput[];
+    shares?: ExpenseShareInput[];
+    items?: ExpenseItemInput[];
 }
 
 export interface UpdateExpenseRequest {
@@ -50,18 +59,30 @@ export interface ExpenseShareResponse {
     user?: UserSummary;
 }
 
+export interface ExpenseItemResponse {
+    id: string;
+    expenseId: string;
+    name: string;
+    price: number;
+    quantity: number;
+    assignedTo: string;
+    user?: UserSummary;
+}
+
 export interface ExpenseResponse {
     id: string;
     groupId: string;
     title: string;
     amountTotal: number;
     currency: string;
+    splitType: string;
     category?: string;
     expenseType?: string;
     paidBy: UserSummary;
     expenseDate: Date;
     note?: string;
     shares: ExpenseShareResponse[];
+    items?: ExpenseItemResponse[];
     createdAt: Date;
 }
 

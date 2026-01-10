@@ -5,8 +5,7 @@ const vnpay_1 = require("vnpay");
 const settlementService_1 = require("./settlementService");
 const accountService_1 = require("./accountService");
 const settlement_1 = require("../type/settlement");
-const client_1 = require("@prisma/client");
-const prisma = new client_1.PrismaClient();
+const prisma_1 = require("../prisma");
 // Initialize VNPay instance
 const vnpay = new vnpay_1.VNPay({
     tmnCode: process.env.VNPAY_TMN_CODE || 'DEMO',
@@ -41,7 +40,7 @@ exports.vnpayService = {
             vnp_CreateDate: createDate
         });
         // Update settlement with txnRef
-        await prisma.settlement.update({
+        await prisma_1.prisma.settlement.update({
             where: { id: settlementId },
             data: { vnpayTxnRef: txnRef }
         });
@@ -68,7 +67,7 @@ exports.vnpayService = {
             vnp_CreateDate: createDate
         });
         // Update top-up with txnRef
-        await prisma.topUp.update({
+        await prisma_1.prisma.topUp.update({
             where: { id: topUpId },
             data: { vnpayTxnRef: txnRef }
         });
@@ -91,7 +90,7 @@ exports.vnpayService = {
             const txnRef = query.vnp_TxnRef;
             // Check if it is a TopUp transaction
             if (txnRef.startsWith('TU_')) {
-                const topUp = await prisma.topUp.findFirst({
+                const topUp = await prisma_1.prisma.topUp.findFirst({
                     where: { vnpayTxnRef: txnRef }
                 });
                 if (!topUp) {
@@ -105,7 +104,7 @@ exports.vnpayService = {
                 };
             }
             // Otherwise, handle as Settlement
-            const settlement = await prisma.settlement.findFirst({
+            const settlement = await prisma_1.prisma.settlement.findFirst({
                 where: { vnpayTxnRef: txnRef }
             });
             if (!settlement) {
@@ -135,7 +134,7 @@ exports.vnpayService = {
             const vnpAmount = parseInt(query.vnp_Amount || '0') / 100;
             // Handle TopUp
             if (txnRef.startsWith('TU_')) {
-                const topUp = await prisma.topUp.findFirst({
+                const topUp = await prisma_1.prisma.topUp.findFirst({
                     where: { vnpayTxnRef: txnRef }
                 });
                 if (!topUp) {
@@ -156,7 +155,7 @@ exports.vnpayService = {
                 return { RspCode: '00', Message: 'Confirm Success' };
             }
             // Handle Settlement (Existing Logic)
-            const settlement = await prisma.settlement.findFirst({
+            const settlement = await prisma_1.prisma.settlement.findFirst({
                 where: { vnpayTxnRef: txnRef }
             });
             if (!settlement) {

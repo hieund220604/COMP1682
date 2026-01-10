@@ -122,6 +122,83 @@ exports.emailService = {
         }
     },
     /**
+     * Send OTP email with a pre-generated OTP (for withdrawal, password reset, etc.)
+     * Does not create a new OTP, only sends the provided one
+     */
+    async sendOTPEmail(email, otp) {
+        // Log OTP to console for development/testing
+        console.log(`[DEV MODE] OTP for ${email}: ${otp}`);
+        try {
+            await transporter.sendMail({
+                from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+                to: email,
+                subject: '🔐 Your Verification Code - SplitPay',
+                html: `
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          </head>
+          <body style="margin: 0; padding: 0; background-color: #f4f7fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+            <table role="presentation" cellspacing="0" cellpadding="0" width="100%" style="background-color: #f4f7fa;">
+              <tr>
+                <td style="padding: 40px 20px;">
+                  <table role="presentation" cellspacing="0" cellpadding="0" width="100%" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);">
+                    <tr>
+                      <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px; text-align: center;">
+                        <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 700;">SplitPay</h1>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 40px;">
+                        <p style="margin: 0 0 32px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                          Hello! We received a request to verify your email address. Please use the verification code below to complete your request:
+                        </p>
+                        <!-- OTP Box -->
+                        <div style="background: linear-gradient(135deg, #f8f9ff 0%, #f0f4ff 100%); border: 2px dashed #667eea; border-radius: 12px; padding: 32px; text-align: center; margin: 0 0 32px;">
+                          <p style="margin: 0 0 8px; color: #667eea; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 2px;">Your Verification Code</p>
+                          <h1 style="margin: 0; color: #1a1a2e; font-size: 42px; font-weight: 700; letter-spacing: 12px; font-family: 'Courier New', monospace;">${otp}</h1>
+                        </div>
+                        <!-- Timer Notice -->
+                        <div style="background-color: #fff8e6; border-left: 4px solid #f6ad55; border-radius: 0 8px 8px 0; padding: 16px 20px; margin: 0 0 32px;">
+                          <p style="margin: 0; color: #744210; font-size: 14px;">
+                            <strong>⏱️ Time Sensitive:</strong> This code will expire in <strong>10 minutes</strong>. Please use it promptly.
+                          </p>
+                        </div>
+                        <p style="margin: 0; color: #718096; font-size: 14px; line-height: 1.6;">
+                          If you didn't request this verification code, you can safely ignore this email. Someone may have entered your email address by mistake.
+                        </p>
+                      </td>
+                    </tr>
+                    <!-- Footer -->
+                    <tr>
+                      <td style="background-color: #f8fafc; padding: 32px 40px; border-top: 1px solid #e2e8f0;">
+                        <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
+                          <tr>
+                            <td style="text-align: center;">
+                              <p style="margin: 0 0 8px; color: #1a1a2e; font-size: 16px; font-weight: 600;">SplitPay</p>
+                              <p style="margin: 0; color: #718096; font-size: 12px;">Expense Sharing Made Easy</p>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </body>
+          </html>
+        `,
+            });
+        }
+        catch (error) {
+            console.error('Failed to send OTP email (ignoring for dev):', error);
+            // In development, we continue anyway so the user can verify from console
+        }
+    },
+    /**
      * Verify OTP
      */
     verifyOTP(email, otp) {

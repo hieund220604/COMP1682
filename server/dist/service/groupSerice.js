@@ -4,9 +4,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.groupService = void 0;
-const client_1 = require("@prisma/client");
+const prisma_1 = require("../prisma");
 const crypto_1 = __importDefault(require("crypto"));
-const prisma = new client_1.PrismaClient();
 // Helper to transform user object from Prisma (null) to API format (undefined)
 function transformUser(user) {
     return {
@@ -19,7 +18,7 @@ function transformUser(user) {
 exports.groupService = {
     // Create a new group
     async createGroup(userId, data) {
-        const group = await prisma.group.create({
+        const group = await prisma_1.prisma.group.create({
             data: {
                 name: data.name,
                 baseCurrency: data.baseCurrency || 'VND',
@@ -62,13 +61,13 @@ exports.groupService = {
     },
     // Get group by ID (validate user is member)
     async getGroupById(userId, groupId) {
-        const membership = await prisma.groupMember.findFirst({
+        const membership = await prisma_1.prisma.groupMember.findFirst({
             where: { groupId, userId, leftAt: null }
         });
         if (!membership) {
             throw new Error('Group not found or access denied');
         }
-        const group = await prisma.group.findUnique({
+        const group = await prisma_1.prisma.group.findUnique({
             where: { id: groupId },
             include: {
                 members: {
@@ -105,7 +104,7 @@ exports.groupService = {
     },
     // Get all groups for a user
     async getGroupsForUser(userId) {
-        const memberships = await prisma.groupMember.findMany({
+        const memberships = await prisma_1.prisma.groupMember.findMany({
             where: { userId, leftAt: null },
             include: {
                 group: {
@@ -129,13 +128,13 @@ exports.groupService = {
     },
     // Update group (requires OWNER or ADMIN)
     async updateGroup(userId, groupId, data) {
-        const membership = await prisma.groupMember.findFirst({
+        const membership = await prisma_1.prisma.groupMember.findFirst({
             where: { groupId, userId, leftAt: null }
         });
         if (!membership || (membership.role !== 'OWNER' && membership.role !== 'ADMIN')) {
             throw new Error('Permission denied. Only OWNER or ADMIN can update group.');
         }
-        const updatedGroup = await prisma.group.update({
+        const updatedGroup = await prisma_1.prisma.group.update({
             where: { id: groupId },
             data: {
                 name: data.name,
@@ -159,26 +158,26 @@ exports.groupService = {
     },
     // Delete group (requires OWNER only)
     async deleteGroup(userId, groupId) {
-        const membership = await prisma.groupMember.findFirst({
+        const membership = await prisma_1.prisma.groupMember.findFirst({
             where: { groupId, userId, leftAt: null }
         });
         if (!membership || membership.role !== 'OWNER') {
             throw new Error('Permission denied. Only OWNER can delete group.');
         }
-        await prisma.group.delete({
+        await prisma_1.prisma.group.delete({
             where: { id: groupId }
         });
     },
     // Create invite
     async createInvite(userId, groupId, data) {
-        const membership = await prisma.groupMember.findFirst({
+        const membership = await prisma_1.prisma.groupMember.findFirst({
             where: { groupId, userId, leftAt: null }
         });
         if (!membership || (membership.role !== 'OWNER' && membership.role !== 'ADMIN')) {
             throw new Error('Permission denied. Only OWNER or ADMIN can create invites.');
         }
         // Check if user is already a member
-        const existingMember = await prisma.groupMember.findFirst({
+        const existingMember = await prisma_1.prisma.groupMember.findFirst({
             where: {
                 groupId,
                 user: { email: data.emailInvite },
@@ -189,7 +188,7 @@ exports.groupService = {
             throw new Error('User is already a member of this group.');
         }
         // Check if invite already exists
-        const existingInvite = await prisma.invite.findFirst({
+        const existingInvite = await prisma_1.prisma.invite.findFirst({
             where: {
                 groupId,
                 emailInvite: data.emailInvite,
@@ -202,7 +201,7 @@ exports.groupService = {
         const token = crypto_1.default.randomBytes(32).toString('hex');
         const expiredAt = new Date();
         expiredAt.setDate(expiredAt.getDate() + 7); // 7 days expiry
-        const invite = await prisma.invite.create({
+        const invite = await prisma_1.prisma.invite.create({
             data: {
                 groupId,
                 emailInvite: data.emailInvite,
@@ -224,7 +223,7 @@ exports.groupService = {
     },
     // Accept invite
     async acceptInvite(userId, token) {
-        const invite = await prisma.invite.findUnique({
+        const invite = await prisma_1.prisma.invite.findUnique({
             where: { token }
         });
         if (!invite) {
@@ -234,29 +233,29 @@ exports.groupService = {
             throw new Error('This invite has already been used or expired.');
         }
         if (new Date() > invite.expiredAt) {
-            await prisma.invite.update({
+            await prisma_1.prisma.invite.update({
                 where: { id: invite.id },
                 data: { status: 'EXPIRED' }
             });
             throw new Error('This invite has expired.');
         }
         // Check if user email matches invite email
-        const user = await prisma.user.findUnique({
+        const user = await prisma_1.prisma.user.findUnique({
             where: { id: userId }
         });
         if (!user || user.email !== invite.emailInvite) {
             throw new Error('This invite is not for your email address.');
         }
         // Check if already a member
-        const existingMember = await prisma.groupMember.findFirst({
+        const existingMember = await prisma_1.prisma.groupMember.findFirst({
             where: { groupId: invite.groupId, userId, leftAt: null }
         });
         if (existingMember) {
             throw new Error('You are already a member of this group.');
         }
         // Create member and update invite in transaction
-        const [member] = await prisma.$transaction([
-            prisma.groupMember.create({
+        const [member] = await prisma_1.prisma.$transaction([
+            prisma_1.prisma.groupMember.create({
                 data: {
                     groupId: invite.groupId,
                     userId,
@@ -268,7 +267,7 @@ exports.groupService = {
                     }
                 }
             }),
-            prisma.invite.update({
+            prisma_1.prisma.invite.update({
                 where: { id: invite.id },
                 data: { status: 'ACCEPTED' }
             })
@@ -285,13 +284,13 @@ exports.groupService = {
     },
     // Get group members
     async getGroupMembers(userId, groupId) {
-        const membership = await prisma.groupMember.findFirst({
+        const membership = await prisma_1.prisma.groupMember.findFirst({
             where: { groupId, userId, leftAt: null }
         });
         if (!membership) {
             throw new Error('Group not found or access denied');
         }
-        const members = await prisma.groupMember.findMany({
+        const members = await prisma_1.prisma.groupMember.findMany({
             where: { groupId, leftAt: null },
             include: {
                 user: {
@@ -312,13 +311,13 @@ exports.groupService = {
     },
     // Update member role (requires OWNER)
     async updateMemberRole(userId, groupId, memberId, newRole) {
-        const membership = await prisma.groupMember.findFirst({
+        const membership = await prisma_1.prisma.groupMember.findFirst({
             where: { groupId, userId, leftAt: null }
         });
         if (!membership || membership.role !== 'OWNER') {
             throw new Error('Permission denied. Only OWNER can update member roles.');
         }
-        const targetMember = await prisma.groupMember.findUnique({
+        const targetMember = await prisma_1.prisma.groupMember.findUnique({
             where: { id: memberId }
         });
         if (!targetMember || targetMember.groupId !== groupId || targetMember.leftAt !== null) {
@@ -330,7 +329,7 @@ exports.groupService = {
         if (newRole === 'OWNER') {
             throw new Error('Cannot assign OWNER role. Use transfer ownership instead.');
         }
-        const updatedMember = await prisma.groupMember.update({
+        const updatedMember = await prisma_1.prisma.groupMember.update({
             where: { id: memberId },
             data: { role: newRole },
             include: {
@@ -351,13 +350,13 @@ exports.groupService = {
     },
     // Remove member from group (requires OWNER or ADMIN)
     async removeMember(userId, groupId, memberId) {
-        const membership = await prisma.groupMember.findFirst({
+        const membership = await prisma_1.prisma.groupMember.findFirst({
             where: { groupId, userId, leftAt: null }
         });
         if (!membership || (membership.role !== 'OWNER' && membership.role !== 'ADMIN')) {
             throw new Error('Permission denied. Only OWNER or ADMIN can remove members.');
         }
-        const targetMember = await prisma.groupMember.findUnique({
+        const targetMember = await prisma_1.prisma.groupMember.findUnique({
             where: { id: memberId }
         });
         if (!targetMember || targetMember.groupId !== groupId || targetMember.leftAt !== null) {
@@ -367,14 +366,14 @@ exports.groupService = {
             throw new Error('Cannot remove the group owner.');
         }
         // Soft delete by setting leftAt
-        await prisma.groupMember.update({
+        await prisma_1.prisma.groupMember.update({
             where: { id: memberId },
             data: { leftAt: new Date() }
         });
     },
     // Leave group
     async leaveGroup(userId, groupId) {
-        const membership = await prisma.groupMember.findFirst({
+        const membership = await prisma_1.prisma.groupMember.findFirst({
             where: { groupId, userId, leftAt: null }
         });
         if (!membership) {
@@ -383,21 +382,21 @@ exports.groupService = {
         if (membership.role === 'OWNER') {
             throw new Error('Owner cannot leave the group. Transfer ownership or delete the group instead.');
         }
-        await prisma.groupMember.update({
+        await prisma_1.prisma.groupMember.update({
             where: { id: membership.id },
             data: { leftAt: new Date() }
         });
     },
     // Calculate group balance
     async calculateGroupBalance(userId, groupId) {
-        const membership = await prisma.groupMember.findFirst({
+        const membership = await prisma_1.prisma.groupMember.findFirst({
             where: { groupId, userId, leftAt: null }
         });
         if (!membership) {
             throw new Error('Group not found or access denied');
         }
         // Get all active members
-        const members = await prisma.groupMember.findMany({
+        const members = await prisma_1.prisma.groupMember.findMany({
             where: { groupId, leftAt: null },
             include: {
                 user: {
@@ -406,14 +405,14 @@ exports.groupService = {
             }
         });
         // Get all expenses for this group
-        const expenses = await prisma.expense.findMany({
+        const expenses = await prisma_1.prisma.expense.findMany({
             where: { groupId },
             include: {
                 shares: true
             }
         });
         // Get all settlements for this group
-        const settlements = await prisma.settlement.findMany({
+        const settlements = await prisma_1.prisma.settlement.findMany({
             where: { groupId }
         });
         // Calculate balance for each member
@@ -456,14 +455,14 @@ exports.groupService = {
     // Get pending invites for a user by their email
     async getPendingInvitesForUser(userId) {
         // Get user email first
-        const user = await prisma.user.findUnique({
+        const user = await prisma_1.prisma.user.findUnique({
             where: { id: userId },
             select: { email: true }
         });
         if (!user) {
             throw new Error('User not found');
         }
-        const invites = await prisma.invite.findMany({
+        const invites = await prisma_1.prisma.invite.findMany({
             where: {
                 emailInvite: user.email,
                 status: 'PENDING',

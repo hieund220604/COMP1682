@@ -29,6 +29,7 @@ model User {
   subscriptionSlots SubscriptionSlot[]
   topUps           TopUp[]
   withdrawals      Withdrawal[]
+  expenseItems     ExpenseItem[]
 
   @@map("users")
 }
@@ -144,14 +145,16 @@ model Expense {
   category    String?
   amountTotal Decimal  @map("amount_total")
   currency    String   @default("VND")
+  splitType   String   @default("EQUAL") @map("split_type")
   paidBy      String   @db.Uuid @map("paid_by")
   expenseDate DateTime @default(now()) @db.Date @map("expense_date")
   note        String?
   createdAt   DateTime @default(now()) @map("created_at")
 
-  group  Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  paidByUser User        @relation(fields: [paidBy], references: [id])
-  shares ExpenseShare[]
+  group       Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  paidByUser  User           @relation(fields: [paidBy], references: [id])
+  shares      ExpenseShare[]
+  items       ExpenseItem[]
 
   @@map("expenses")
 }
@@ -168,6 +171,21 @@ model ExpenseShare {
   user    User    @relation(fields: [userId], references: [id])
 
   @@map("expense_shares")
+}
+
+model ExpenseItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  expenseId   String   @db.Uuid @map("expense_id")
+  name        String
+  price       Decimal
+  quantity    Int      @default(1)
+  assignedTo  String   @db.Uuid @map("assigned_to")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  expense     Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [assignedTo], references: [id])
+
+  @@map("expense_items")
 }
 
 model Settlement {

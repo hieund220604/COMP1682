@@ -4,6 +4,8 @@ import {
     UpdateExpenseRequest,
     ExpenseResponse,
     ExpenseShareResponse,
+    ExpenseItemInput,
+    ExpenseItemResponse,
     SplitType,
     UserSummary
 } from '../type/expense';
@@ -47,6 +49,28 @@ function calculateShares(
     }
 }
 
+function calculateSharesFromItems(
+    items: ExpenseItemInput[],
+    payerId: string
+): { userId: string; owedAmount: number }[] {
+    const userTotals = new Map<string, number>();
+
+    for (const item of items) {
+        // Skip items assigned to the payer - they don't owe themselves
+        if (item.assignedTo === payerId) {
+            continue;
+        }
+        const itemTotal = item.price * (item.quantity || 1);
+        const current = userTotals.get(item.assignedTo) || 0;
+        userTotals.set(item.assignedTo, current + itemTotal);
+    }
+
+    return Array.from(userTotals.entries()).map(([userId, owedAmount]) => ({
+        userId,
+        owedAmount: Math.round(owedAmount * 100) / 100
+    }));
+}
+
 export const expenseService = {
     async createExpense(userId: string, groupId: string, data: CreateExpenseRequest): Promise<ExpenseResponse> {
         // Verify user is a member of the group
@@ -58,50 +82,78 @@ export const expenseService = {
             throw new Error('You are not a member of this group');
         }
 
-        // Validate shares
-        if (!data.shares || data.shares.length === 0) {
-            throw new Error('At least one share is required');
-        }
-
-        // Validate all share users are members
+        // Get all valid member IDs
         const memberIds = await prisma.groupMember.findMany({
             where: { groupId, leftAt: null },
             select: { userId: true }
         });
         const validMemberIds = new Set(memberIds.map(m => m.userId));
 
-        for (const share of data.shares) {
-            if (!validMemberIds.has(share.userId)) {
-                throw new Error(`User ${share.userId} is not a member of this group`);
+        let calculatedShares: { userId: string; owedAmount: number }[] = [];
+        let itemsToCreate: { name: string; price: number; quantity: number; assignedTo: string }[] = [];
+
+        if (data.splitType === SplitType.ITEM_BASED) {
+            // Validate items for ITEM_BASED split
+            if (!data.items || data.items.length === 0) {
+                throw new Error('At least one item is required for item-based split');
+            }
+
+            // Validate all item users are members
+            for (const item of data.items) {
+                if (!validMemberIds.has(item.assignedTo)) {
+                    throw new Error(`User ${item.assignedTo} is not a member of this group`);
+                }
+            }
+
+            // Calculate shares from items (excluding payer's own items)
+            calculatedShares = calculateSharesFromItems(data.items, userId);
+            itemsToCreate = data.items.map(item => ({
+                name: item.name,
+                price: item.price,
+                quantity: item.quantity || 1,
+                assignedTo: item.assignedTo
+            }));
+        } else {
+            // Validate shares for other split types
+            if (!data.shares || data.shares.length === 0) {
+                throw new Error('At least one share is required');
+            }
+
+            // Validate all share users are members
+            for (const share of data.shares) {
+                if (!validMemberIds.has(share.userId)) {
+                    throw new Error(`User ${share.userId} is not a member of this group`);
+                }
+            }
+
+            // Calculate shares
+            calculatedShares = calculateShares(data.amountTotal, data.splitType, data.shares);
+
+            // Validate total matches for EXACT split
+            if (data.splitType === SplitType.EXACT) {
+                const totalShares = calculatedShares.reduce((sum, s) => sum + s.owedAmount, 0);
+                if (Math.abs(totalShares - data.amountTotal) > 1) {
+                    throw new Error('Sum of shares must equal total amount');
+                }
+            }
+
+            // Validate percentages for PERCENT split
+            if (data.splitType === SplitType.PERCENT) {
+                const totalPercent = data.shares.reduce((sum, s) => sum + (s.percent || 0), 0);
+                if (Math.abs(totalPercent - 100) > 0.01) {
+                    throw new Error('Percentages must sum to 100%');
+                }
             }
         }
 
-        // Calculate shares
-        const calculatedShares = calculateShares(data.amountTotal, data.splitType, data.shares);
-
-        // Validate total matches for EXACT split
-        if (data.splitType === SplitType.EXACT) {
-            const totalShares = calculatedShares.reduce((sum, s) => sum + s.owedAmount, 0);
-            if (Math.abs(totalShares - data.amountTotal) > 1) {
-                throw new Error('Sum of shares must equal total amount');
-            }
-        }
-
-        // Validate percentages for PERCENT split
-        if (data.splitType === SplitType.PERCENT) {
-            const totalPercent = data.shares.reduce((sum, s) => sum + (s.percent || 0), 0);
-            if (Math.abs(totalPercent - 100) > 0.01) {
-                throw new Error('Percentages must sum to 100%');
-            }
-        }
-
-        // Create expense with shares in transaction
+        // Create expense with shares (and items if ITEM_BASED)
         const expense = await prisma.expense.create({
             data: {
                 groupId,
                 title: data.title,
                 amountTotal: data.amountTotal,
                 currency: data.currency || 'VND',
+                splitType: data.splitType,
                 category: data.category,
                 expenseType: data.expenseType,
                 paidBy: userId,
@@ -112,13 +164,23 @@ export const expenseService = {
                         userId: s.userId,
                         owedAmount: s.owedAmount
                     }))
-                }
+                },
+                items: itemsToCreate.length > 0 ? {
+                    create: itemsToCreate
+                } : undefined
             },
             include: {
                 paidByUser: {
                     select: { id: true, email: true, displayName: true, avatarUrl: true }
                 },
                 shares: {
+                    include: {
+                        user: {
+                            select: { id: true, email: true, displayName: true, avatarUrl: true }
+                        }
+                    }
+                },
+                items: {
                     include: {
                         user: {
                             select: { id: true, email: true, displayName: true, avatarUrl: true }
@@ -134,6 +196,7 @@ export const expenseService = {
             title: expense.title,
             amountTotal: Number(expense.amountTotal),
             currency: expense.currency,
+            splitType: expense.splitType,
             category: expense.category ?? undefined,
             expenseType: expense.expenseType ?? undefined,
             paidBy: transformUser(expense.paidByUser),
@@ -146,6 +209,15 @@ export const expenseService = {
                 owedAmount: Number(s.owedAmount),
                 shareNote: s.shareNote ?? undefined,
                 user: transformUser(s.user)
+            })),
+            items: expense.items.map(item => ({
+                id: item.id,
+                expenseId: item.expenseId,
+                name: item.name,
+                price: Number(item.price),
+                quantity: item.quantity,
+                assignedTo: item.assignedTo,
+                user: transformUser(item.user)
             })),
             createdAt: expense.createdAt
         };
@@ -186,6 +258,7 @@ export const expenseService = {
             title: expense.title,
             amountTotal: Number(expense.amountTotal),
             currency: expense.currency,
+            splitType: expense.splitType,
             category: expense.category ?? undefined,
             expenseType: expense.expenseType ?? undefined,
             paidBy: transformUser(expense.paidByUser),
@@ -241,6 +314,7 @@ export const expenseService = {
                 title: expense.title,
                 amountTotal: Number(expense.amountTotal),
                 currency: expense.currency,
+                splitType: expense.splitType,
                 category: expense.category ?? undefined,
                 expenseType: expense.expenseType ?? undefined,
                 paidBy: transformUser(expense.paidByUser),
@@ -333,6 +407,7 @@ export const expenseService = {
             title: expense.title,
             amountTotal: Number(expense.amountTotal),
             currency: expense.currency,
+            splitType: expense.splitType,
             category: expense.category ?? undefined,
             expenseType: expense.expenseType ?? undefined,
             paidBy: transformUser(expense.paidByUser),

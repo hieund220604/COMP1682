@@ -19,14 +19,33 @@ export const expenseController = {
             }
 
             const { groupId } = req.params;
-            const { title, amountTotal, splitType, shares } = req.body;
+            const { title, amountTotal, splitType, shares, items } = req.body;
 
-            if (!title || !amountTotal || !splitType || !shares) {
+            if (!title || !amountTotal || !splitType) {
                 res.status(400).json({
                     success: false,
-                    error: { message: 'Title, amount, split type and shares are required', code: 'VALIDATION_ERROR' }
+                    error: { message: 'Title, amount and split type are required', code: 'VALIDATION_ERROR' }
                 });
                 return;
+            }
+
+            // Validate: ITEM_BASED requires items, other types require shares
+            if (splitType === 'ITEM_BASED') {
+                if (!items || items.length === 0) {
+                    res.status(400).json({
+                        success: false,
+                        error: { message: 'Items are required for ITEM_BASED split type', code: 'VALIDATION_ERROR' }
+                    });
+                    return;
+                }
+            } else {
+                if (!shares || shares.length === 0) {
+                    res.status(400).json({
+                        success: false,
+                        error: { message: 'Shares are required for this split type', code: 'VALIDATION_ERROR' }
+                    });
+                    return;
+                }
             }
 
             const expense = await expenseService.createExpense(req.user.userId, groupId, req.body);

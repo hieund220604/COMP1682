@@ -6,9 +6,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.authService = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const client_1 = require("@prisma/client");
+const prisma_1 = require("../prisma");
 const emailService_1 = require("./emailService");
-const prisma = new client_1.PrismaClient();
 exports.authService = {
     async hashPassword(password) {
         const salt = await bcryptjs_1.default.genSalt(10);
@@ -32,12 +31,12 @@ exports.authService = {
         }
     },
     async SignUpUser(email, password, displayName) {
-        const existingUser = await prisma.user.findUnique({ where: { email } });
+        const existingUser = await prisma_1.prisma.user.findUnique({ where: { email } });
         if (existingUser) {
             throw new Error('Email is already registered');
         }
         const hashedPassword = await this.hashPassword(password);
-        const newUser = await prisma.user.create({
+        const newUser = await prisma_1.prisma.user.create({
             data: {
                 email,
                 passwordHash: hashedPassword,
@@ -54,14 +53,14 @@ exports.authService = {
         };
     },
     async verifyOTP(email, otp) {
-        const user = await prisma.user.findUnique({ where: { email } });
+        const user = await prisma_1.prisma.user.findUnique({ where: { email } });
         if (!user) {
             throw new Error('User not found');
         }
         if (!emailService_1.emailService.verifyOTP(email, otp)) {
             throw new Error('Invalid or expired OTP');
         }
-        const updatedUser = await prisma.user.update({
+        const updatedUser = await prisma_1.prisma.user.update({
             where: { email },
             data: { status: 'active' },
         });
@@ -77,7 +76,7 @@ exports.authService = {
         };
     },
     async loginUser(email, password) {
-        const user = await prisma.user.findUnique({ where: { email } });
+        const user = await prisma_1.prisma.user.findUnique({ where: { email } });
         if (!user) {
             throw new Error('Invalid email or password');
         }
@@ -99,7 +98,7 @@ exports.authService = {
         };
     },
     async passwordResetRequest(email) {
-        const user = await prisma.user.findUnique({ where: { email } });
+        const user = await prisma_1.prisma.user.findUnique({ where: { email } });
         if (!user) {
             return 'If the email is registered, a password reset link has been sent.';
         }
@@ -115,7 +114,7 @@ exports.authService = {
                 throw new Error('Invalid token type');
             }
             const passsowrdHash = await this.hashPassword(newPassword);
-            const updatedUser = await prisma.user.update({
+            const updatedUser = await prisma_1.prisma.user.update({
                 where: { id: decoded.userId },
                 data: { passwordHash: passsowrdHash },
             });
@@ -130,7 +129,7 @@ exports.authService = {
         }
     },
     async resendOTP(email) {
-        const user = await prisma.user.findUnique({ where: { email } });
+        const user = await prisma_1.prisma.user.findUnique({ where: { email } });
         if (!user) {
             throw new Error('User not found');
         }
@@ -141,7 +140,7 @@ exports.authService = {
         return 'A new OTP has been sent to your email.';
     },
     async getUserProfilebyID(userId) {
-        const user = await prisma.user.findUnique({
+        const user = await prisma_1.prisma.user.findUnique({
             where: { id: userId },
             select: { id: true, email: true, displayName: true, avatarUrl: true, status: true, createdAt: true, updatedAt: true }
         });
@@ -151,7 +150,7 @@ exports.authService = {
         return user;
     },
     async updateProfile(userId, data) {
-        const user = await prisma.user.update({
+        const user = await prisma_1.prisma.user.update({
             where: { id: userId },
             data,
             select: {
